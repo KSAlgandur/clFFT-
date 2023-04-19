@@ -10,8 +10,9 @@ CONFIG -= app_bundle
 SOURCES += \
         main.cpp
 
-LIBS += -lOpenCL -lboost_system -lboost_filesystem -lclFFT
+LIBS += -lOpenCL -lboost_system -lboost_filesystem -L/path/to/clFFT/lib -lclFFT
 
+INCLUDEPATH += /path/to/clFFT/include
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
