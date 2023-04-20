@@ -9,6 +9,7 @@
 
 
 
+
 void PrintOutVec(const std::vector<float>& vec)
 {
     for( auto v : vec)
@@ -62,29 +63,26 @@ void clFFT_lib(const size_t N,cl::Context& context,cl::CommandQueue& queue,cl::B
 
     //===================================================================================
     /* Create a default plan for a complex FFT. */
-        err = clfftCreateDefaultPlan(&planHandle, context(), dim, clLengths);
+    err = clfftCreateDefaultPlan(&planHandle, context(), dim, clLengths);
 
-        /* Set plan parameters. */
-        err = clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
-        err = clfftSetLayout(planHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
-        err = clfftSetResultLocation(planHandle, CLFFT_INPLACE); // CLFFT_INPLACE CLFFT_OUTOFPLACE
+    /* Set plan parameters. */
+    clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
+    clfftSetLayout(planHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
+    clfftSetResultLocation(planHandle, CLFFT_INPLACE); // CLFFT_INPLACE CLFFT_OUTOFPLACE
 
-        /* Bake the plan. */
-        err = clfftBakePlan(planHandle, 1, &queue(), NULL, NULL);
+    /* Bake the plan. */
+    clfftBakePlan(planHandle, 1, &queue(), NULL, NULL);
 
         /* Execute the plan. */
-        err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue(), 0, NULL, NULL, &bufVec(),NULL, NULL);
-        queue.finish();
+    clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue(), 0, NULL, NULL, &bufVec(),NULL, NULL);
+    queue.finish();
 
-        //считывание результата
-        queue.enqueueReadBuffer(bufVec,CL_TRUE, 0, params.size() * sizeof(float), params.data());
-
-
-
-        /* Release the plan. */
-        err = clfftDestroyPlan( &planHandle );
-        /* Release clFFT library. */
-        clfftTeardown();
+    //считывание результата
+    queue.enqueueReadBuffer(bufVec,CL_TRUE, 0, params.size() * sizeof(float), params.data());
+    /* Release the plan. */
+    clfftDestroyPlan( &planHandle );
+    /* Release clFFT library. */
+    clfftTeardown();
 }
 
 int main()
