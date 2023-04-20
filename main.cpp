@@ -1,54 +1,22 @@
-#include "CL/cl.h"
-#include "CL/cl2.hpp"
-#include <clFFT.h>
+#define CL_TARGET_OPENCL_VERSION 300
 #include <iostream>
-#include <boost/compute.hpp>
 #include <vector>
-#include <string>
+#include <boost/compute/core.hpp>
+#include <boost/compute/container/vector.hpp>
 #include <clFFT.h>
 
 
+namespace compute = boost::compute;
 
-
-void PrintOutVec(const std::vector<float>& vec)
+void PrintOutVec(const std::vector<std::complex<float>>& vec)
 {
     for( auto v : vec)
     {
-        std::cout << v << " ";
+        std::cout <<"("<< v.imag() <<";"<<v.real()<<")"<<",";
     }
 }
 
-void CreateVector(std::vector<float>& vec, size_t N)
-{
-    printf("\nPerforming fft on an one dimensional array of size N = %lu\n", (unsigned long)N);
-    for(size_t i = 0; i < vec.size() ;i++ )
-        {
-            float x = 1;//i;
-            float y = 4;//i * 3;
-            vec[i] = x;
-            vec[i + 1] = y;
-            std::cout <<std::fixed << "(" << vec[i] << "," << vec[i+1] << ")" ;
-
-        }
-    printf("\n\nfft result: \n");
-}
-
-void DevicesOnThePlatform(std::vector<cl::Platform>& platforms,std::vector<cl::Device>& devices)
-{
-    cl::Platform::get(&platforms);
-    for(const auto& platform : platforms)
-    {
-        std::cout << "Platform found:   "<< platform.getInfo<CL_PLATFORM_NAME>()<<std::endl;
-    }
-    platforms.front().getDevices(CL_DEVICE_TYPE_GPU,&devices);
-
-    for(const auto& device : devices)
-    {
-        std::cout <<"Device:\t\t " <<device.getInfo<CL_DEVICE_NAME>()<<std::endl;
-    }
-}
-
-void clFFT_lib(const size_t N,cl::Context& context,cl::CommandQueue& queue,cl::Buffer& bufVec,std::vector<float>& params)
+void clFFT_lib(const size_t N,compute::context& context,compute::command_queue& queue,  compute::vector<std::complex<float>>& buff)
 {
     cl_int err;
     /* FFT library realted declarations */
@@ -61,9 +29,8 @@ void clFFT_lib(const size_t N,cl::Context& context,cl::CommandQueue& queue,cl::B
     err = clfftInitSetupData(&fftSetup);
     err = clfftSetup(&fftSetup);
 
-    //===================================================================================
     /* Create a default plan for a complex FFT. */
-    err = clfftCreateDefaultPlan(&planHandle, context(), dim, clLengths);
+    err = clfftCreateDefaultPlan(&planHandle, context, dim, clLengths);
 
     /* Set plan parameters. */
     clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
@@ -71,46 +38,47 @@ void clFFT_lib(const size_t N,cl::Context& context,cl::CommandQueue& queue,cl::B
     clfftSetResultLocation(planHandle, CLFFT_INPLACE); // CLFFT_INPLACE CLFFT_OUTOFPLACE
 
     /* Bake the plan. */
-    clfftBakePlan(planHandle, 1, &queue(), NULL, NULL);
+    clfftBakePlan(planHandle, 1, reinterpret_cast<cl_command_queue*>(&queue), NULL, NULL);
 
         /* Execute the plan. */
-    clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue(), 0, NULL, NULL, &bufVec(),NULL, NULL);
+    clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, reinterpret_cast<cl_command_queue*>(&queue), 0, NULL, NULL, reinterpret_cast<cl_mem*>(&buff),NULL, NULL);
     queue.finish();
 
-    //считывание результата
-    queue.enqueueReadBuffer(bufVec,CL_TRUE, 0, params.size() * sizeof(float), params.data());
     /* Release the plan. */
     clfftDestroyPlan( &planHandle );
     /* Release clFFT library. */
     clfftTeardown();
+
+
 }
-
 int main()
+
 {
+     // get the default device
+
     size_t N = 16;
-    std::vector<cl::Platform> platforms;
-    std::vector<cl::Device>devices;
-    //std::vector<float>params(N * 2,1);
-    std::vector<float>params(N * 2);
-    params[0] = 16;
-    params[1] = 16;
+    compute::device device = compute::system::default_device();
+    compute::platform platform = device.platform();
+    compute::context context(device);
+    compute::command_queue queue(context,device);
+
+    // print the device's name
+    std::cout << "platform: " << platform.name() << std::endl;
+    std::cout << "device:\t  " << device.name() << std::endl;
 
 
-    DevicesOnThePlatform(platforms,devices); // перебор и вывод всех доступных платформ Opencl и устройств на ПК
-
-    cl::Context context(devices[0]);
-    cl::CommandQueue queue(context,devices[0]);
-
-    // создание буфера
-    cl::Buffer bufVec(context,CL_MEM_READ_WRITE, params.size() * sizeof(float));
-    //cl::Buffer bufOut(context,CL_MEM_READ_WRITE, out.size() * sizeof(float));
-
-    // запись данных в буферы
-    queue.enqueueWriteBuffer(bufVec,CL_TRUE,0,params.size() * sizeof(float),params.data());
+    std::vector<std::complex<float>>params(N);// исходный вектор
+    std::fill(params.begin(),params.end(),std::complex<float>(1.0f, 1.0f)); //заполние вектора на хосте значениями
 
 
-    clFFT_lib(N,context,queue,bufVec,params);
+    compute::vector<std::complex<float>> buff(params.size(), context); // создаем вектор комплексных чисел на устройстве
+
+    compute::copy(params.begin(),params.end(),buff.begin(),queue);
+
+    clFFT_lib(N,context,queue,buff);
+
+    compute::copy(buff.begin(),buff.end(),params.begin(), queue);
+
     PrintOutVec(params);
 
-    return 0;
 }
